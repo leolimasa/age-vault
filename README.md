@@ -1,6 +1,6 @@
 # age-vault
 
-`age-vault` lets one user encrypt data and all vault users decrypt it by encrypting a central **vault key** with each user's `age` public key.
+A command-line tool that enables secure secret sharing across multiple machines using a centralized vault key system built on top of the `age` encryption tool.
 
 ## Usage
 
@@ -27,7 +27,7 @@
 
 Follow this workflow to add a new user/machine to the vault:
 
-* Have the user create a public/private key pair on their machine using `age` (ideally, in an HSM)
+* Have the user create a public/private key pair on their machine using one of the `age` keygen commands (like `age-plugin-tpm`)
 * Have the user move the newly created identity and public key into the age vault locations using:
   * `age-vault set-idenity [identity file]`
   * `age-vault set-pubkey [public key file]`
