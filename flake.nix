@@ -36,6 +36,7 @@
           ];
 
           shellHook = ''
+            export ENV_NAME="$ENV_NAME age-vault"
             echo "Age Vault development environment"
             echo "Go version: $(go version)"
           '';
