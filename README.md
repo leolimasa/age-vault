@@ -2,6 +2,8 @@
 
 `age-vault` lets one user encrypt data and all vault users decrypt it by encrypting a central **vault key** with each user's `age` public key.
 
+It provides an internal ssh agent that allows using ssh keys stored in the vault.
+
 ## Usage
 
 `age-vault encrypt [file]`: encrypts
