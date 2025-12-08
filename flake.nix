@@ -35,6 +35,7 @@
             golangci-lint
             age
             sops
+            openssh
           ];
 
           shellHook = ''

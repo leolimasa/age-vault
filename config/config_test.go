@@ -122,3 +122,127 @@ func TestEnsureParentDir(t *testing.T) {
 		t.Errorf("Expected directory permissions to be 0700, got %o", info.Mode().Perm())
 	}
 }
+
+func TestResolveConfigPath(t *testing.T) {
+	homeDir, _ := os.UserHomeDir()
+	configDir := "/config/dir"
+
+	tests := []struct {
+		name          string
+		path          string
+		configFileDir string
+		expected      string
+	}{
+		{"empty path", "", configDir, ""},
+		{"absolute path", "/absolute/path", configDir, "/absolute/path"},
+		{"home path", "~/test", configDir, filepath.Join(homeDir, "test")},
+		{"relative path with config dir", "./relative/path", configDir, filepath.Join(configDir, "./relative/path")},
+		{"relative path no config dir", "./relative/path", "", "./relative/path"},
+		{"simple relative", "vault/key.age", configDir, filepath.Join(configDir, "vault/key.age")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveConfigPath(tt.path, tt.configFileDir)
+			if result != tt.expected {
+				t.Errorf("resolveConfigPath(%s, %s) = %s, expected %s", tt.path, tt.configFileDir, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNewConfig_YAMLWithRelativePaths(t *testing.T) {
+	// Clear environment variables
+	os.Unsetenv("AGE_VAULT_KEY_FILE")
+	os.Unsetenv("AGE_VAULT_IDENTITY_FILE")
+	os.Unsetenv("AGE_VAULT_SSH_KEYS_DIR")
+
+	// Create a temp directory with a config file
+	tempDir := t.TempDir()
+	configContent := `vault_key_file: ./vault/vault_key.age
+identity_file: ./vault/identity.txt
+ssh_keys_dir: ./vault/ssh_keys
+`
+	configPath := filepath.Join(tempDir, "age_vault.yml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Change to the temp directory
+	oldWd, _ := os.Getwd()
+	os.Chdir(tempDir)
+	defer os.Chdir(oldWd)
+
+	cfg, err := NewConfig()
+	if err != nil {
+		t.Fatalf("NewConfig() failed: %v", err)
+	}
+
+	// Paths should be resolved relative to the config file directory
+	expectedVaultKey := filepath.Join(tempDir, "vault", "vault_key.age")
+	expectedIdentity := filepath.Join(tempDir, "vault", "identity.txt")
+	expectedSSHKeys := filepath.Join(tempDir, "vault", "ssh_keys")
+
+	if cfg.VaultKeyFile != expectedVaultKey {
+		t.Errorf("Expected VaultKeyFile to be %s, got %s", expectedVaultKey, cfg.VaultKeyFile)
+	}
+
+	if cfg.IdentityFile != expectedIdentity {
+		t.Errorf("Expected IdentityFile to be %s, got %s", expectedIdentity, cfg.IdentityFile)
+	}
+
+	if cfg.SSHKeysDir != expectedSSHKeys {
+		t.Errorf("Expected SSHKeysDir to be %s, got %s", expectedSSHKeys, cfg.SSHKeysDir)
+	}
+}
+
+func TestNewConfig_YAMLFromSubdirectory(t *testing.T) {
+	// Clear environment variables
+	os.Unsetenv("AGE_VAULT_KEY_FILE")
+	os.Unsetenv("AGE_VAULT_IDENTITY_FILE")
+	os.Unsetenv("AGE_VAULT_SSH_KEYS_DIR")
+
+	// Create a temp directory with a config file
+	tempDir := t.TempDir()
+	configContent := `vault_key_file: ./vault/vault_key.age
+identity_file: ./vault/identity.txt
+ssh_keys_dir: ./vault/ssh_keys
+`
+	configPath := filepath.Join(tempDir, "age_vault.yml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Create a subdirectory and change to it
+	subDir := filepath.Join(tempDir, "subdir", "nested")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create subdirectory: %v", err)
+	}
+
+	oldWd, _ := os.Getwd()
+	os.Chdir(subDir)
+	defer os.Chdir(oldWd)
+
+	cfg, err := NewConfig()
+	if err != nil {
+		t.Fatalf("NewConfig() failed: %v", err)
+	}
+
+	// Paths should still be resolved relative to the config file directory (tempDir),
+	// not the current working directory (subDir)
+	expectedVaultKey := filepath.Join(tempDir, "vault", "vault_key.age")
+	expectedIdentity := filepath.Join(tempDir, "vault", "identity.txt")
+	expectedSSHKeys := filepath.Join(tempDir, "vault", "ssh_keys")
+
+	if cfg.VaultKeyFile != expectedVaultKey {
+		t.Errorf("Expected VaultKeyFile to be %s, got %s", expectedVaultKey, cfg.VaultKeyFile)
+	}
+
+	if cfg.IdentityFile != expectedIdentity {
+		t.Errorf("Expected IdentityFile to be %s, got %s", expectedIdentity, cfg.IdentityFile)
+	}
+
+	if cfg.SSHKeysDir != expectedSSHKeys {
+		t.Errorf("Expected SSHKeysDir to be %s, got %s", expectedSSHKeys, cfg.SSHKeysDir)
+	}
+}

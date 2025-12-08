@@ -33,11 +33,15 @@ type sshKeyInfo struct {
 
 // NewVaultSSHAgent creates a new SSH agent for vault-encrypted keys.
 func NewVaultSSHAgent(keysDir string, vaultKey *vault.VaultKey) (*VaultSSHAgent, error) {
+	fmt.Fprintf(os.Stderr, "Loading SSH keys from directory: %s\n", keysDir)
+
 	// Scan the keys directory for .age files
 	matches, err := filepath.Glob(filepath.Join(keysDir, "*.age"))
 	if err != nil {
 		return nil, fmt.Errorf("error scanning keys directory: %w", err)
 	}
+
+	fmt.Fprintf(os.Stderr, "Found %d encrypted SSH keys\n", len(matches))
 
 	a := &VaultSSHAgent{
 		keysDir:  keysDir,
@@ -52,6 +56,7 @@ func NewVaultSSHAgent(keysDir string, vaultKey *vault.VaultKey) (*VaultSSHAgent,
 			fmt.Fprintf(os.Stderr, "Warning: failed to load key %s: %v\n", keyPath, err)
 			continue
 		}
+		fmt.Fprintf(os.Stderr, "Loaded key: %s\n", filepath.Base(keyPath))
 	}
 
 	return a, nil
@@ -114,9 +119,11 @@ func (a *VaultSSHAgent) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, er
 	// Find the key
 	for _, k := range a.keys {
 		if keysEqual(k.publicKey, key) {
+			fmt.Fprintf(os.Stderr, "Signing request with key: %s\n", filepath.Base(k.path))
 			return k.signer.Sign(nil, data)
 		}
 	}
+	fmt.Fprintf(os.Stderr, "Sign error: key not found\n")
 	return nil, fmt.Errorf("key not found")
 }
 
@@ -125,6 +132,7 @@ func (a *VaultSSHAgent) SignWithFlags(key ssh.PublicKey, data []byte, flags agen
 	// Find the key
 	for _, k := range a.keys {
 		if keysEqual(k.publicKey, key) {
+			fmt.Fprintf(os.Stderr, "Signing request (with flags) with key: %s\n", filepath.Base(k.path))
 			if signer, ok := k.signer.(ssh.AlgorithmSigner); ok {
 				var algo string
 				switch flags {
@@ -142,12 +150,39 @@ func (a *VaultSSHAgent) SignWithFlags(key ssh.PublicKey, data []byte, flags agen
 			return k.signer.Sign(nil, data)
 		}
 	}
+	fmt.Fprintf(os.Stderr, "SignWithFlags error: key not found\n")
 	return nil, fmt.Errorf("key not found")
 }
 
 // keysEqual compares two SSH public keys for equality.
 func keysEqual(a, b ssh.PublicKey) bool {
 	return bytes.Equal(a.Marshal(), b.Marshal())
+}
+
+// reloadKeys reloads all keys from the vault directory.
+// This ensures new keys added since the agent started are picked up.
+func (a *VaultSSHAgent) reloadKeys() error {
+	fmt.Fprintf(os.Stderr, "Reloading keys from vault directory\n")
+
+	// Clear existing keys
+	a.keys = make([]sshKeyInfo, 0)
+
+	// Scan the keys directory for .age files
+	matches, err := filepath.Glob(filepath.Join(a.keysDir, "*.age"))
+	if err != nil {
+		return fmt.Errorf("error scanning keys directory: %w", err)
+	}
+
+	// Load each key
+	for _, keyPath := range matches {
+		if err := a.loadKey(keyPath); err != nil {
+			// Skip keys that fail to load
+			fmt.Fprintf(os.Stderr, "Warning: failed to reload key %s: %v\n", keyPath, err)
+			continue
+		}
+	}
+
+	return nil
 }
 
 // Signers returns all signers (required by agent.Agent interface).
@@ -192,7 +227,13 @@ func (a *VaultSSHAgent) Start(socketPath string) error {
 			if err != nil {
 				return
 			}
-			go agent.ServeAgent(a, conn)
+			go func(c net.Conn) {
+				// Reload keys before serving each connection
+				if err := a.reloadKeys(); err != nil {
+					fmt.Fprintf(os.Stderr, "Error reloading keys: %v\n", err)
+				}
+				agent.ServeAgent(a, c)
+			}(conn)
 		}
 	}()
 

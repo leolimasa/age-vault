@@ -4,3 +4,6 @@
 * Ensure the ssh agent always reloads keys from the vault directory when a signing request is received, to pick up any new keys added since the last request.
 * On test/, create a `start_ssh_server.sh` that runs a localhost only temporary ssh daemon that will accept the public key specified as the first argument for authentication.
 * On test/, create a new run_integration_tests.sh script that sets up a temporary vault directory using `age` and the compiled `age-vault` command. Then, run all possible workflows using a compiled `age-vault`, including starting up the ssh agent and testing the connection to the docker server created above.
+* Make sure to write integration tests for both environment variables and config file based configurations.
+* Make sure to write integration tests for sops passthrough
+* Make sure to add any needed commands to the nix flake dev environment.

@@ -109,6 +109,32 @@ centralized vault key system. Built on top of the age encryption tool.`,
 	}
 	vaultKeyCmd.AddCommand(vaultKeySetCmd)
 
+	// Add vault-key from-identity subcommand
+	vaultKeyFromIdentityCmd := &cobra.Command{
+		Use:   "from-identity",
+		Short: "Initialize vault key from identity",
+		Long:  "Creates a new vault key encrypted with the identity in AGE_VAULT_IDENTITY_FILE.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return commands.RunVaultKeyFromIdentity(cfg)
+		},
+	}
+	vaultKeyCmd.AddCommand(vaultKeyFromIdentityCmd)
+
+	// Add vault-key pubkey subcommand
+	var vaultKeyPubkeyOutput string
+	vaultKeyPubkeyCmd := &cobra.Command{
+		Use:   "pubkey",
+		Short: "Output the public key for the vault key",
+		Long:  "Extracts and outputs the public key from the vault key.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return commands.RunVaultKeyPubkey(vaultKeyPubkeyOutput, cfg)
+		},
+	}
+	vaultKeyPubkeyCmd.Flags().StringVarP(&vaultKeyPubkeyOutput, "output", "o", "", "Output file (default: stdout)")
+	vaultKeyCmd.AddCommand(vaultKeyPubkeyCmd)
+
 	// Add identity command group
 	identityCmd := &cobra.Command{
 		Use:   "identity",

@@ -2,6 +2,27 @@
 
 A command-line tool that enables secure secret sharing across multiple machines using a centralized vault key system. Built on top of the `age` encryption tool.
 
+## Example
+
+```bash
+
+# Create age identity (use any age plugin) and initialize vault
+age-plugin-tpm --generate -o age_identity.txt
+age-vault vault-key from-identity age_identity.txt
+
+# Encrypt a file
+age-vault encrypt test_file.txt -o test_file.txt.age
+
+# Decrypt a file
+age-vault decrypt test_file.txt.age
+
+# Add another machine/user to the vault (public key created on the other machine)
+age-vault vault-key encrypt new_machine_public_key.txt -o new_machine_vault_key.txt
+
+# Import a vault key (created by another machine that has access to the vault)
+age-vault vault-key set new_machine_vault_key.txt
+```
+
 ## Usage
 
 * `age-vault encrypt [file]`: encrypts a file using the vault key. Will read from stdin if no file is provided. Will output to stdout unless `-o [output file]` is provided.
@@ -22,9 +43,9 @@ A command-line tool that enables secure secret sharing across multiple machines 
 
 **Supported environment variables:**
 
-`AGE_VAULT_KEY_FILE`: the vault key encrypted by the pubkey present in `AGE_VAULT_IDENTITY_FILE`. If not set, defaults to `~/.config/.age-vault/vault_key.age`.
-`AGE_VAULT_IDENTITY_FILE`: the age identity used to **encrypt and decrypt** the vault key. If not set, defaults to `~/.config/.age-vault/identity.txt`.
-`AGE_VAULT_SSH_KEYS_DIR`: the directory containing vault encrypted SSH keys to be loaded by `age-vault ssh-agent`.
+* `AGE_VAULT_KEY_FILE`: the vault key encrypted by the pubkey present in `AGE_VAULT_IDENTITY_FILE`. If not set, defaults to `~/.config/.age-vault/vault_key.age`.
+* `AGE_VAULT_IDENTITY_FILE`: the age identity used to **encrypt and decrypt** the vault key. If not set, defaults to `~/.config/.age-vault/identity.txt`.
+* `AGE_VAULT_SSH_KEYS_DIR`: the directory containing vault encrypted SSH keys to be loaded by `age-vault ssh-agent`.
 
 **age_vault.yml config file:**
 
@@ -56,12 +77,12 @@ Follow this workflow to add a new user/machine to the vault:
 
 **On another machine already setup with the vault:**
 
-* Run `age-vault encrypt-vault-key -o [user@machine.age] [pubkeyfile]` to get the encrypted vault key for that user/machine
+* Run `age-vault vault-key encrypt -o [user@machine.age] [pubkeyfile]` to get the encrypted vault key for that user/machine
 * Send the encrypted vault key back to the target machine 
 
 **Back on the target machine:**
 
-* Load the vault key with `age-vault set-vault-key [key file]`
+* Load the vault key with `age-vault vault-key set [key file]`
 
 ## Vault key backup
 

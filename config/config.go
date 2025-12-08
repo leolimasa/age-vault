@@ -12,9 +12,10 @@ import (
 
 // Config holds all configuration for age-vault.
 type Config struct {
-	VaultKeyFile string // Path to encrypted vault key
-	IdentityFile string // Path to user's private key (identity)
-	SSHKeysDir   string // Directory containing encrypted SSH keys
+	VaultKeyFile  string // Path to encrypted vault key
+	IdentityFile  string // Path to user's private key (identity)
+	SSHKeysDir    string // Directory containing encrypted SSH keys
+	configFileDir string // Directory containing the loaded config file (private)
 }
 
 // yamlConfig represents the structure of age_vault.yml file.
@@ -31,10 +32,13 @@ func NewConfig() (*Config, error) {
 	cfg := &Config{}
 
 	// First, load from YAML config file if present
-	yamlCfg, err := findAndLoadYAMLConfig()
+	yamlCfg, configFileDir, err := findAndLoadYAMLConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error loading YAML config: %w", err)
 	}
+
+	// Store the config file directory
+	cfg.configFileDir = configFileDir
 
 	// Get home directory for defaults
 	homeDir, err := os.UserHomeDir()
@@ -44,28 +48,33 @@ func NewConfig() (*Config, error) {
 
 	defaultConfigDir := filepath.Join(homeDir, ".config", ".age-vault")
 
+	// Resolve YAML paths relative to config file directory
+	resolvedVaultKeyFile := resolveConfigPath(yamlCfg.VaultKeyFile, configFileDir)
+	resolvedIdentityFile := resolveConfigPath(yamlCfg.IdentityFile, configFileDir)
+	resolvedSSHKeysDir := resolveConfigPath(yamlCfg.SSHKeysDir, configFileDir)
+
 	// Set VaultKeyFile
 	cfg.VaultKeyFile = getConfigValue(
 		os.Getenv("AGE_VAULT_KEY_FILE"),
-		yamlCfg.VaultKeyFile,
+		resolvedVaultKeyFile,
 		filepath.Join(defaultConfigDir, "vault_key.age"),
 	)
 
 	// Set IdentityFile
 	cfg.IdentityFile = getConfigValue(
 		os.Getenv("AGE_VAULT_IDENTITY_FILE"),
-		yamlCfg.IdentityFile,
+		resolvedIdentityFile,
 		filepath.Join(defaultConfigDir, "identity.txt"),
 	)
 
 	// Set SSHKeysDir (no default)
 	cfg.SSHKeysDir = getConfigValue(
 		os.Getenv("AGE_VAULT_SSH_KEYS_DIR"),
-		yamlCfg.SSHKeysDir,
+		resolvedSSHKeysDir,
 		"",
 	)
 
-	// Expand home directory in all paths
+	// Expand home directory in all paths (only for env vars or defaults)
 	cfg.VaultKeyFile = expandHomePath(cfg.VaultKeyFile)
 	cfg.IdentityFile = expandHomePath(cfg.IdentityFile)
 	if cfg.SSHKeysDir != "" {
@@ -76,13 +85,14 @@ func NewConfig() (*Config, error) {
 }
 
 // findAndLoadYAMLConfig searches for age_vault.yml by traversing up the directory tree.
-func findAndLoadYAMLConfig() (yamlConfig, error) {
+// Returns the config, the directory containing the config file, and any error.
+func findAndLoadYAMLConfig() (yamlConfig, string, error) {
 	cfg := yamlConfig{}
 
 	// Start from current directory
 	currentDir, err := os.Getwd()
 	if err != nil {
-		return cfg, nil // Not fatal, just use defaults
+		return cfg, "", nil // Not fatal, just use defaults
 	}
 
 	// Traverse up the directory tree
@@ -92,14 +102,14 @@ func findAndLoadYAMLConfig() (yamlConfig, error) {
 			// File exists, try to load it
 			data, err := os.ReadFile(configPath)
 			if err != nil {
-				return cfg, fmt.Errorf("error reading config file %s: %w", configPath, err)
+				return cfg, "", fmt.Errorf("error reading config file %s: %w", configPath, err)
 			}
 
 			if err := yaml.Unmarshal(data, &cfg); err != nil {
-				return cfg, fmt.Errorf("error parsing config file %s: %w", configPath, err)
+				return cfg, "", fmt.Errorf("error parsing config file %s: %w", configPath, err)
 			}
 
-			return cfg, nil
+			return cfg, currentDir, nil
 		}
 
 		// Move up one directory
@@ -111,7 +121,7 @@ func findAndLoadYAMLConfig() (yamlConfig, error) {
 		currentDir = parentDir
 	}
 
-	return cfg, nil // No config file found, return empty config
+	return cfg, "", nil // No config file found, return empty config
 }
 
 // getConfigValue returns the first non-empty value from the arguments.
@@ -145,6 +155,35 @@ func expandHomePath(path string) string {
 		}
 	}
 
+	return path
+}
+
+// resolveConfigPath resolves a path from a config file.
+// - If path is empty, returns empty string
+// - If path is absolute, returns as-is
+// - If path starts with ~, expands home directory
+// - Otherwise, treats as relative path and joins with configFileDir
+func resolveConfigPath(path string, configFileDir string) string {
+	if path == "" {
+		return ""
+	}
+
+	// Check if it's an absolute path
+	if filepath.IsAbs(path) {
+		return path
+	}
+
+	// Check if it starts with ~
+	if len(path) > 0 && path[0] == '~' {
+		return expandHomePath(path)
+	}
+
+	// If we have a config file directory, resolve relative to it
+	if configFileDir != "" {
+		return filepath.Join(configFileDir, path)
+	}
+
+	// Otherwise, return as-is
 	return path
 }
 
