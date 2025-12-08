@@ -33,6 +33,8 @@
             gopls
             go-tools
             golangci-lint
+            age
+            sops
           ];
 
           shellHook = ''
