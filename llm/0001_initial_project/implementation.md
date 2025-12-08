@@ -16,12 +16,12 @@ This separation allows the core functionality to be consumed programmatically wh
 ```go
 type Config struct {
     VaultKeyFile     string  // Path to encrypted vault key
-    PubKeyFile       string  // Path to user's public key
     IdentityFile     string  // Path to user's private key (identity)
     SSHKeysDir       string  // Directory containing encrypted SSH keys
 }
 ```
-- Stores all configuration paths from environment variables or defaults
+- Stores all configuration paths from environment variables, YAML config file, or defaults
+- Supports `age_vault.yml` config file auto-detection by traversing up directory tree
 - Provides validation methods to ensure paths are accessible
 - **Public package** - can be imported by other programs
 
@@ -43,17 +43,19 @@ type VaultKey struct {
 **Create new file** (Public package - can be imported by other programs)
 
 #### `NewConfig() (*Config, error)`
-- Reads environment variables:
+- Searches for `age_vault.yml` config file by traversing up directory tree from current working directory
+- If found, loads configuration from YAML file (supports: `vault_key_file`, `identity_file`, `ssh_keys_dir`)
+- Reads environment variables (override YAML config):
   - `AGE_VAULT_KEY_FILE` (default: `~/.config/.age-vault/vault_key.age`)
-  - `AGE_VAULT_PUBKEY_FILE` (default: `~/.config/.age-vault/pubkey.txt`)
   - `AGE_VAULT_IDENTITY_FILE` (default: `~/.config/.age-vault/identity.txt`)
   - `AGE_VAULT_SSH_KEYS_DIR` (no default)
 - Expands home directory paths using `os.UserHomeDir()`
 - Returns populated Config struct
 
-#### `(c *Config) EnsureConfigDir() error`
-- Creates `~/.config/.age-vault/` directory if it doesn't exist
+#### `EnsureParentDir(path string) error`
+- Creates parent directory for the given file path if it doesn't exist
 - Sets appropriate permissions (0700)
+- Used when saving vault keys or identity files to ensure the directory structure exists
 
 ### `vault/vault.go`
 **Create new file** (Public package - can be imported by other programs)
@@ -103,10 +105,10 @@ type VaultKey struct {
 - Returns the first recipient found
 - Used to load user's public key
 
-#### `SaveFile(sourcePath, destPath string) error`
+#### `CopyFile(sourcePath, destPath string) error`
 - Copies a file from source to destination
-- Used for `set-vault-key`, `set-identity`, and `set-pubkey` commands
-- Creates parent directories if needed
+- Used for `vault-key set` and `identity set` commands
+- Creates parent directories if needed using `config.EnsureParentDir()`
 - Sets appropriate file permissions (0600 for sensitive files)
 
 ### `sshagent/agent.go`
@@ -144,7 +146,11 @@ type VaultKey struct {
 
 #### `main()`
 - Sets up CLI framework (using `cobra` or `flag` package)
-- Defines all subcommands: `encrypt`, `decrypt`, `sops`, `ssh-agent`, `encrypt-vault-key`, `set-vault-key`, `set-identity`, `set-pubkey`
+- Defines hierarchical command structure:
+  - Top-level commands: `encrypt`, `decrypt`, `sops`
+  - `vault-key` command group with subcommands: `encrypt`, `set`
+  - `identity` command group with subcommands: `set`, `pubkey`
+  - `ssh` command group with subcommands: `start-agent`, `list-keys`
 - Each subcommand delegates to corresponding handler in `cmd/age-vault/commands/`
 - Loads config once at startup using `config.NewConfig()`
 - Handles global error reporting and exit codes
@@ -183,16 +189,17 @@ type VaultKey struct {
 - Imports library packages: `config`, `vault`, `keymgmt`
 - Loads user's identity and reads vault key file
 - Decrypts the vault key using `vault.DecryptVaultKey()`
-- Writes vault key to a temporary file with secure permissions (0600)
-- Sets environment variable pointing to temp file for sops to use
+- Creates a pipe (file descriptor) containing the vault key identity
+- Uses process substitution to pass the file descriptor to sops via `/dev/fd/N` on Unix
+- Sets `SOPS_AGE_KEY_FILE` environment variable to point to the file descriptor
 - Executes `sops` command with provided arguments using `exec.Command`
-- Ensures temporary vault key file is securely deleted after sops completes
+- Vault key never touches disk, only exists in memory and the pipe buffer
 - Returns sops exit code
 
-### `cmd/age-vault/commands/ssh_agent.go`
+### `cmd/age-vault/commands/ssh_start_agent.go`
 **Create new file** (CLI-specific command handler)
 
-#### `RunSSHAgent(keysDir string, cfg *config.Config) error`
+#### `RunSSHStartAgent(keysDir string, cfg *config.Config) error`
 - Imports library packages: `config`, `vault`, `keymgmt`, `sshagent`
 - Uses keysDir from argument or falls back to `cfg.SSHKeysDir`
 - Loads user's identity and reads vault key file
@@ -203,10 +210,20 @@ type VaultKey struct {
 - Prints environment variables for user to set: `SSH_AUTH_SOCK` and `SSH_AGENT_PID`
 - Handles shutdown signals gracefully (SIGINT/SIGTERM)
 
-### `cmd/age-vault/commands/encrypt_vault_key.go`
+### `cmd/age-vault/commands/ssh_list_keys.go`
 **Create new file** (CLI-specific command handler)
 
-#### `RunEncryptVaultKey(pubKeyPath, outputPath string, cfg *config.Config) error`
+#### `RunSSHListKeys(cfg *config.Config) error`
+- Imports library packages: `config`
+- Reads the SSH keys directory from `cfg.SSHKeysDir`
+- Lists all `.age` encrypted files in the directory
+- Displays the key file names to the user
+- Does not decrypt keys, only shows what's available
+
+### `cmd/age-vault/commands/vault_key_encrypt.go`
+**Create new file** (CLI-specific command handler)
+
+#### `RunVaultKeyEncrypt(pubKeyPath, outputPath string, cfg *config.Config) error`
 - Imports library packages: `config`, `vault`, `keymgmt`
 - Checks if vault key file exists at `cfg.VaultKeyFile`
 - If not exists: generates new vault key using `vault.GenerateVaultKey()` and saves encrypted version
@@ -216,40 +233,41 @@ type VaultKey struct {
 - Writes encrypted output to file or stdout
 - Returns encrypted vault key that can be sent to new user
 
-### `cmd/age-vault/commands/set_vault_key.go`
+### `cmd/age-vault/commands/vault_key_set.go`
 **Create new file** (CLI-specific command handler)
 
-#### `RunSetVaultKey(sourcePath string, cfg *config.Config) error`
+#### `RunVaultKeySet(sourcePath string, cfg *config.Config) error`
 - Imports library packages: `config`, `keymgmt`
-- Ensures config directory exists using `cfg.EnsureConfigDir()`
-- Copies file from `sourcePath` to `cfg.VaultKeyFile` using `keymgmt.SaveFile()`
+- Copies file from `sourcePath` to `cfg.VaultKeyFile` using `keymgmt.CopyFile()`
+- Creates parent directory if needed
 - Sets permissions to 0600
 
-### `cmd/age-vault/commands/set_identity.go`
+### `cmd/age-vault/commands/identity_set.go`
 **Create new file** (CLI-specific command handler)
 
-#### `RunSetIdentity(sourcePath string, cfg *config.Config) error`
+#### `RunIdentitySet(sourcePath string, cfg *config.Config) error`
 - Imports library packages: `config`, `keymgmt`
-- Ensures config directory exists using `cfg.EnsureConfigDir()`
-- Copies identity file from `sourcePath` to `cfg.IdentityFile` using `keymgmt.SaveFile()`
+- Copies identity file from `sourcePath` to `cfg.IdentityFile` using `keymgmt.CopyFile()`
+- Creates parent directory if needed
 - Sets permissions to 0600
 
-### `cmd/age-vault/commands/set_pubkey.go`
+### `cmd/age-vault/commands/identity_pubkey.go`
 **Create new file** (CLI-specific command handler)
 
-#### `RunSetPubkey(sourcePath string, cfg *config.Config) error`
+#### `RunIdentityPubkey(outputPath string, cfg *config.Config) error`
 - Imports library packages: `config`, `keymgmt`
-- Ensures config directory exists using `cfg.EnsureConfigDir()`
-- Copies public key file from `sourcePath` to `cfg.PubKeyFile` using `keymgmt.SaveFile()`
-- Sets permissions to 0644
+- Loads user identity from `cfg.IdentityFile` using `keymgmt.LoadIdentity()`
+- Extracts public key from the identity
+- Writes public key to output file or stdout
+- Used to share public key with vault administrators for encryption
 
 ## Key Implementation Notes
 
 ### Security Considerations
 1. **Memory Management**: Use `runtime.KeepAlive()` and explicit zeroing for sensitive data where possible
 2. **File Permissions**: All identity and vault key files use 0600 permissions
-3. **Temporary Files**: For sops integration, create temp files with 0600 permissions and ensure cleanup via defer
-4. **No Disk Persistence**: Vault key never written to disk in plaintext form
+3. **Process Substitution**: For sops integration, use file descriptor pipes to pass vault key without writing to disk
+4. **No Disk Persistence**: Vault key never written to disk in plaintext form, even in temporary files
 
 ### Error Handling
 - All functions return errors following Go conventions
@@ -286,13 +304,15 @@ age-vault/
 │           ├── encrypt.go            (create)
 │           ├── decrypt.go            (create)
 │           ├── sops.go               (create)
-│           ├── ssh_agent.go          (create)
-│           ├── encrypt_vault_key.go  (create)
-│           ├── set_vault_key.go      (create)
-│           ├── set_identity.go       (create)
-│           └── set_pubkey.go         (create)
+│           ├── ssh_start_agent.go    (create)
+│           ├── ssh_list_keys.go      (create)
+│           ├── vault_key_encrypt.go  (create)
+│           ├── vault_key_set.go      (create)
+│           ├── identity_set.go       (create)
+│           └── identity_pubkey.go    (create)
 ├── main.go                           (delete - replaced by cmd/age-vault/main.go)
 ├── go.mod                            (modify - update module path if needed)
+├── age_vault.yml                     (optional - user creates for per-project config)
 └── README.md                         (existing)
 ```
 

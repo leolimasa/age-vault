@@ -23,26 +23,33 @@ A command-line tool that enables secure secret sharing across multiple personal 
 - The system shall provide a passthrough command for `sops` (Secrets OPerationS) that automatically configures the vault key as an age identity
 - Users shall be able to run any `sops` command through age-vault without manual configuration
 
-### 4. SSH Agent Functionality
+### 4. SSH Key Management
 - The system shall provide an SSH agent implementation that manages vault-encrypted SSH keys
 - The SSH agent shall automatically decrypt SSH keys on demand using the vault key
 - Users shall be able to specify a directory containing encrypted SSH keys
 - The SSH agent shall load all keys from the specified directory
+- Users shall be able to list available SSH keys in the configured directory
 
 ### 5. User/Machine Onboarding
 - The system shall support adding new users/machines to the vault
 - New users shall be able to generate their own public/private key pairs using standard `age` tools
 - Existing vault administrators shall be able to encrypt the vault key for new users
-- The system shall provide commands to set up user identity, public key, and vault key files
+- The system shall provide commands to set up user identity and vault key files
+- Users shall be able to extract the public key from their identity file using `age-vault identity pubkey`
 
 ### 6. Configuration Management
 - The system shall use environment variables for configuration
 - Default configuration locations shall be provided in `~/.config/.age-vault/`
 - Users shall be able to override default locations via environment variables:
-  - Vault key file location
-  - User public key location
-  - User identity (private key) location
-  - SSH keys directory location
+  - Vault key file location (`AGE_VAULT_KEY_FILE`)
+  - User identity (private key) location (`AGE_VAULT_IDENTITY_FILE`)
+  - SSH keys directory location (`AGE_VAULT_SSH_KEYS_DIR`)
+- The system shall support YAML configuration files (`age_vault.yml`) for per-project configurations
+- Configuration files shall be auto-detected by traversing up the directory tree from the current working directory
+- YAML configuration shall support the following fields:
+  - `vault_key_file` - Path to vault key file
+  - `identity_file` - Path to identity file
+  - `ssh_keys_dir` - Path to SSH keys directory
 
 ### 7. Security Requirements
 - The vault key shall never be written to disk in decrypted form

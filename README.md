@@ -1,13 +1,14 @@
 # age-vault
 
-A command-line tool that enables secure secret sharing across multiple machines using a centralized vault key system built on top of the `age` encryption tool.
+A command-line tool that enables secure secret sharing across multiple machines using a centralized vault key system. Built on top of the `age` encryption tool.
 
 ## Usage
 
 * `age-vault encrypt [file]`: encrypts a file using the vault key. Will read from stdin if no file is provided. Will output to stdout unless `-o [output file]` is provided.
 * `age-vault decrypt [file]`: decrypts a file using the vault key. Will read from stdin if no file is provided. Will output to stdout unless `-o [output file]` is provided.
 * `age-vault sops ...`: a passthrough to `sops` that sets up the vault key as an age identity before running sops commands. Example: `age-vault sops -d secrets.enc.yaml`. Requires `sops` to be installed.
-* `age-vault ssh-agent [key dir]`: starts an ssh-agent that loads vault encrypted SSH keys from the provided directory (or `AGE_VAULT_SSH_KEYS_DIR` if not provided). The agent will decrypt them on demand using the vault key.
+* `age-vault ssh start-agent [key dir]`: starts an ssh-agent that loads vault encrypted SSH keys from the provided directory (or `AGE_VAULT_SSH_KEYS_DIR` if not provided). The agent will decrypt them on demand using the vault key.
+* `age-vault ssh list-keys`: lists the keys present in `AGE_VAULT_SSH_KEYS_DIR`
 
 ### Key management
 

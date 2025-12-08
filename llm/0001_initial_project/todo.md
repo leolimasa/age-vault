@@ -20,8 +20,10 @@ This project is structured as a **library + CLI application**:
 - [ ] Implement `config/config.go` (public library package)
   - [ ] Create `Config` struct with all environment variable fields
   - [ ] Implement `NewConfig()` function to read env vars and set defaults
+  - [ ] Implement YAML config file loading (`age_vault.yml`)
+  - [ ] Implement config file auto-detection by traversing up directory tree
   - [ ] Implement home directory expansion logic
-  - [ ] Implement `EnsureConfigDir()` to create config directory
+  - [ ] Implement `EnsureParentDir(path string)` to create parent directories when saving files
   - [ ] Add config validation
   - [ ] Add package documentation for public API
 
@@ -39,7 +41,7 @@ This project is structured as a **library + CLI application**:
 - [ ] Implement `keymgmt/keymgmt.go` (public library package)
   - [ ] Implement `LoadIdentity()` to load age identity from file
   - [ ] Implement `LoadRecipient()` to load age public key from file
-  - [ ] Implement `SaveFile()` to securely copy files with proper permissions
+  - [ ] Implement `CopyFile()` to securely copy files with proper permissions
   - [ ] Add package documentation for public API
 
 ### Phase 1 Testing
@@ -78,9 +80,13 @@ This project is structured as a **library + CLI application**:
 ### CLI: Main Application Setup
 - [ ] Implement `cmd/age-vault/main.go`
   - [ ] Add dependency (cobra or use stdlib flag)
-  - [ ] Set up CLI framework
+  - [ ] Set up CLI framework with hierarchical commands
   - [ ] Define `encrypt` subcommand with `-o` flag
   - [ ] Define `decrypt` subcommand with `-o` flag
+  - [ ] Define `sops` subcommand (passthrough)
+  - [ ] Define `vault-key` command group with `encrypt` and `set` subcommands
+  - [ ] Define `identity` command group with `set` and `pubkey` subcommands
+  - [ ] Define `ssh` command group with `start-agent` and `list-keys` subcommands
   - [ ] Wire up subcommands to call command handlers
   - [ ] Load config using `config.NewConfig()`
   - [ ] Implement proper error handling and exit codes
@@ -97,49 +103,52 @@ This project is structured as a **library + CLI application**:
 
 ## Phase 3: CLI Application - Key Management Commands
 
-### CLI: Set Commands
-- [ ] Implement `cmd/age-vault/commands/set_vault_key.go`
+### CLI: vault-key and identity Command Groups
+- [ ] Implement `cmd/age-vault/commands/vault_key_set.go`
   - [ ] Import library packages: `config`, `keymgmt`
-  - [ ] Implement `RunSetVaultKey()` function
-  - [ ] Use `keymgmt.SaveFile()` to copy file with proper permissions (0600)
-  - [ ] Create parent directories if needed using `cfg.EnsureConfigDir()`
-- [ ] Implement `cmd/age-vault/commands/set_identity.go`
-  - [ ] Import library packages: `config`, `keymgmt`
-  - [ ] Implement `RunSetIdentity()` function
-  - [ ] Use `keymgmt.SaveFile()` to copy identity file with 0600 permissions
-- [ ] Implement `cmd/age-vault/commands/set_pubkey.go`
-  - [ ] Import library packages: `config`, `keymgmt`
-  - [ ] Implement `RunSetPubkey()` function
-  - [ ] Use `keymgmt.SaveFile()` to copy public key file with 0644 permissions
-
-### CLI: Encrypt Vault Key Command
-- [ ] Implement `cmd/age-vault/commands/encrypt_vault_key.go`
+  - [ ] Implement `RunVaultKeySet()` function
+  - [ ] Use `keymgmt.CopyFile()` to copy file with proper permissions (0600)
+  - [ ] Create parent directories if needed using `config.EnsureParentDir()`
+- [ ] Implement `cmd/age-vault/commands/vault_key_encrypt.go`
   - [ ] Import library packages: `config`, `vault`, `keymgmt`
-  - [ ] Implement `RunEncryptVaultKey()` function
+  - [ ] Implement `RunVaultKeyEncrypt()` function
   - [ ] Check if vault key exists, generate using `vault.GenerateVaultKey()` if not
   - [ ] Load existing vault key if present
   - [ ] Load recipient public key using `keymgmt.LoadRecipient()`
   - [ ] Encrypt vault key for recipient using `vault.EncryptVaultKey()`
   - [ ] Write to output file or stdout
+- [ ] Implement `cmd/age-vault/commands/identity_set.go`
+  - [ ] Import library packages: `config`, `keymgmt`
+  - [ ] Implement `RunIdentitySet()` function
+  - [ ] Use `keymgmt.CopyFile()` to copy identity file with 0600 permissions
+  - [ ] Create parent directories if needed using `config.EnsureParentDir()`
+- [ ] Implement `cmd/age-vault/commands/identity_pubkey.go`
+  - [ ] Import library packages: `config`, `keymgmt`
+  - [ ] Implement `RunIdentityPubkey()` function
+  - [ ] Load identity using `keymgmt.LoadIdentity()`
+  - [ ] Extract public key from identity
+  - [ ] Write to output file or stdout
 
 ### CLI Integration
-- [ ] Update `cmd/age-vault/main.go` to add key management subcommands
-  - [ ] Define `set-vault-key` subcommand
-  - [ ] Define `set-identity` subcommand
-  - [ ] Define `set-pubkey` subcommand
-  - [ ] Define `encrypt-vault-key` subcommand with `-o` flag
+- [ ] Update `cmd/age-vault/main.go` to add command groups
+  - [ ] Define `vault-key encrypt` subcommand with `-o` flag
+  - [ ] Define `vault-key set` subcommand
+  - [ ] Define `identity set` subcommand
+  - [ ] Define `identity pubkey` subcommand with `-o` flag
   - [ ] Wire up all subcommands to their handlers
 
 ### Phase 3 Testing
 - [ ] Test new user workflow:
   - [ ] Generate new age identity: `age-keygen -o test-identity.txt`
-  - [ ] Set identity: `age-vault set-identity test-identity.txt`
-  - [ ] Set pubkey: `age-vault set-pubkey test-pubkey.txt`
-  - [ ] Generate encrypted vault key: `age-vault encrypt-vault-key other-pubkey.txt -o vault-key.age`
-  - [ ] Set vault key: `age-vault set-vault-key vault-key.age`
+  - [ ] Set identity: `age-vault identity set test-identity.txt`
+  - [ ] Get pubkey: `age-vault identity pubkey -o test-pubkey.txt`
+  - [ ] Generate encrypted vault key: `age-vault vault-key encrypt other-pubkey.txt -o vault-key.age`
+  - [ ] Set vault key: `age-vault vault-key set vault-key.age`
 - [ ] Test vault key generation when none exists
 - [ ] Test vault key encryption for second user
-- [ ] Verify file permissions are set correctly (0600 for sensitive, 0644 for public)
+- [ ] Test YAML config file (`age_vault.yml`) detection and loading
+- [ ] Test config file traversal up directory tree
+- [ ] Verify file permissions are set correctly (0600 for sensitive files)
 - [ ] validate implementation
 
 ## Phase 4: CLI Application - SOPS Integration
@@ -150,11 +159,11 @@ This project is structured as a **library + CLI application**:
   - [ ] Implement `RunSops()` function
   - [ ] Load user identity using `keymgmt.LoadIdentity()`
   - [ ] Decrypt vault key using `vault.DecryptVaultKey()`
-  - [ ] Create temporary file with secure permissions (0600)
-  - [ ] Write vault key identity to temp file
+  - [ ] Create a pipe (file descriptor) containing the vault key identity
+  - [ ] Use process substitution to pass fd to sops via `/dev/fd/N`
+  - [ ] Set `SOPS_AGE_KEY_FILE` environment variable to the file descriptor path
   - [ ] Execute sops command with arguments using `exec.Command`
-  - [ ] Set up proper environment for sops to find age identity
-  - [ ] Ensure temp file cleanup with defer
+  - [ ] Ensure vault key never touches disk (only in memory/pipe buffer)
   - [ ] Capture and return sops exit code
 
 ### CLI Integration
@@ -173,7 +182,7 @@ This project is structured as a **library + CLI application**:
 - [ ] Test error handling when sops is not installed
 - [ ] validate implementation
 
-## Phase 5: Library + CLI - SSH Agent Implementation
+## Phase 5: Library + CLI - SSH Key Management
 
 ### Library: SSH Agent Package
 - [ ] Add SSH dependencies to `go.mod`
@@ -189,10 +198,10 @@ This project is structured as a **library + CLI application**:
   - [ ] Add proper cleanup and shutdown handling
   - [ ] Add package documentation for public API
 
-### CLI: SSH Agent Command
-- [ ] Implement `cmd/age-vault/commands/ssh_agent.go`
+### CLI: SSH Commands
+- [ ] Implement `cmd/age-vault/commands/ssh_start_agent.go`
   - [ ] Import library packages: `config`, `vault`, `keymgmt`, `sshagent`
-  - [ ] Implement `RunSSHAgent()` function
+  - [ ] Implement `RunSSHStartAgent()` function
   - [ ] Handle keys directory from argument or env var
   - [ ] Load user identity using `keymgmt.LoadIdentity()`
   - [ ] Decrypt vault key using `vault.DecryptVaultKey()`
@@ -201,19 +210,28 @@ This project is structured as a **library + CLI application**:
   - [ ] Start agent using `agent.Start()`
   - [ ] Print environment variables (SSH_AUTH_SOCK, SSH_AGENT_PID)
   - [ ] Handle SIGINT/SIGTERM for graceful shutdown
+- [ ] Implement `cmd/age-vault/commands/ssh_list_keys.go`
+  - [ ] Import library packages: `config`
+  - [ ] Implement `RunSSHListKeys()` function
+  - [ ] Read SSH keys directory from `cfg.SSHKeysDir`
+  - [ ] List all `.age` encrypted files in directory
+  - [ ] Display key file names to user
+  - [ ] No decryption needed, just show available keys
 
 ### CLI Integration
-- [ ] Update `cmd/age-vault/main.go` to add ssh-agent subcommand
-  - [ ] Define `ssh-agent` subcommand with optional directory argument
-  - [ ] Wire up to command handler
+- [ ] Update `cmd/age-vault/main.go` to add ssh command group
+  - [ ] Define `ssh start-agent` subcommand with optional directory argument
+  - [ ] Define `ssh list-keys` subcommand
+  - [ ] Wire up to command handlers
 
 ### Phase 5 Testing
 - [ ] Create test SSH key: `ssh-keygen -t ed25519 -f test-ssh-key`
 - [ ] Encrypt SSH key with age-vault: `age-vault encrypt test-ssh-key -o test-ssh-key.age`
 - [ ] Set up keys directory with encrypted SSH key
-- [ ] Start agent: `age-vault ssh-agent /path/to/keys/dir`
+- [ ] Test list keys: `age-vault ssh list-keys`
+- [ ] Start agent: `age-vault ssh start-agent /path/to/keys/dir`
 - [ ] Export SSH_AUTH_SOCK variable
-- [ ] Test listing keys: `ssh-add -l`
+- [ ] Test listing keys via ssh-add: `ssh-add -l`
 - [ ] Test SSH connection using agent key
 - [ ] Test multiple keys in directory
 - [ ] Test agent shutdown and cleanup
