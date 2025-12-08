@@ -12,6 +12,7 @@ A command-line tool that enables secure secret sharing across multiple machines 
 
 ### Key management
 
+* `age-vault vault-key from-identity`: creates a new vault key encrypted with the identity present in `AGE_VAULT_IDENTITY_FILE` and saves it to `AGE_VAULT_KEY_FILE`. Fails if a vault key already exists.
 * `age-vault vault-key encrypt [public key file]`: encrypts the vault key with the provided public key and returns the encrypted version. If a vault key does not yet exist (`AGE_VAULT_KEY_FILE` doesn't exist), one is created and then encrypted using the provided key. Will output to stdout unless `-o [output file]` is provided.
 * `age-vault vault-key set [encrypted key file]`: copies the provided encrypted vault key file to `AGE_VAULT_KEY_FILE`.
 * `age-vault identity set [identity file]`: copies the identity file to the `AGE_VAULT_IDENTITY_FILE` localtion.
@@ -36,6 +37,12 @@ vault_key_file: path/to/vault_key.age
 identity_file: path/to/identity.txt
 ssh_keys_dir: path/to/ssh_keys/
 ```
+
+## New vault workflow
+
+* Create a new age identity using one of the `age` keygen commands (like `age-plugin-tpm`)
+* Move the newly created identity into the age vault using: `age-vault identity set [identity file]`
+* Initialize the vault key using `age-vault vault-key from-identity`
 
 ## New user/machine workflow
 
