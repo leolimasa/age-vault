@@ -8,6 +8,8 @@
 *.so
 *.dylib
 /age-vault
+/test/age-vault
+/result
 
 # Test binary, built with `go test -c`
 *.test
