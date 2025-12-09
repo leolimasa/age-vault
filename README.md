@@ -1,6 +1,6 @@
 # age-vault
 
-A command-line tool that enables secure secret sharing across multiple machines using a centralized vault key system. Built on top of the `age` encryption tool.
+Share secrets across machines. One private key per machine. Keys never leaves the HSM. Built on top of the `age` encryption tool.
 
 ## Example
 
@@ -25,11 +25,13 @@ age-vault vault-key set new_machine_vault_key.txt
 
 ## Usage
 
-* `age-vault encrypt [file]`: encrypts a file using the vault key. Will read from stdin if no file is provided. Will output to stdout unless `-o [output file]` is provided.
-* `age-vault decrypt [file]`: decrypts a file using the vault key. Will read from stdin if no file is provided. Will output to stdout unless `-o [output file]` is provided.
-* `age-vault sops ...`: a passthrough to `sops` that sets up the vault key as an age identity before running sops commands. Example: `age-vault sops -d secrets.enc.yaml`. Requires `sops` to be installed.
-* `age-vault ssh start-agent [key dir]`: starts an ssh-agent that loads vault encrypted SSH keys from the provided directory (or `AGE_VAULT_SSH_KEYS_DIR` if not provided). The agent will decrypt them on demand using the vault key.
-* `age-vault ssh list-keys`: lists the keys present in `AGE_VAULT_SSH_KEYS_DIR`
+| Command                               | Usage                                                                                                                                                                                         |
+|---------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `age-vault encrypt [file]`            | Encrypts a file using the vault key. Reads from stdin if there is no output flag. Outputs to stdout unless `-o [output file]` is provided.                                                    |
+| `age-vault decrypt [file]`            | Decrypts a file using the vault key. Reads from stdin if there is no output flag. Outputs to stdout unless `-o [output file]` is provided.                                                    |
+| `age-vault sops ...`                  | A passthrough to `sops` that sets up the vault key as an age identity before running sops commands. Example: `age-vault sops -d secrets.enc.yaml`. Requires `sops` to be installed.           |
+| `age-vault ssh start-agent [key dir]` | Starts an ssh-agent that loads vault encrypted SSH keys from the provided directory (or `AGE_VAULT_SSH_KEYS_DIR` if not provided). The agent will decrypt them on demand using the vault key. |
+| `age-vault ssh list-keys`             | Lists the keys present in `AGE_VAULT_SSH_KEYS_DIR`                                                                                                                                            |
 
 ### Key management
 
@@ -86,7 +88,7 @@ Follow this workflow to add a new user/machine to the vault:
 
 ## Vault key backup
 
-If you need to backup the vault key (e.g. to offline storage), you can use the `age` command to re-encrypt it using a passphrase:
+Use the `age` command to backup the vault key (e.g to offline storage) by re-encrypting it using a passphrase:
 
 ```bash
 age --decrypt -i "$AGE_VAULT_IDENTITY_FILE" "$AGE_VAULT_KEY_FILE" | age --passphrase -o **reencrypted_file.age**
