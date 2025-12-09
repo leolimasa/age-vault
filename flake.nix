@@ -1,5 +1,5 @@
 {
-  description = "Age Vault - A simple age encryption tool";
+  description = "Age Vault - Share secrets across machines. Built on top of the `age` encryption tool.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -17,10 +17,10 @@
           version = "0.1.0";
           src = ./.;
           
-          vendorHash = "sha256-MOwgWBUCBTW1h2I0n9VEKwcKpC1H/bD+hBjhLFyfnvg=";
+          vendorHash = "sha256-RLRvYay5nuTWSAN0qvSpgzkZhDHNGMi49m3JwtUNw0s=";
 
           meta = with pkgs.lib; {
-            description = "A simple age encryption tool";
+            description = "Share secrets across machines. Built on top of the `age` encryption tool.";
             homepage = "https://github.com/leolimasa/age-vault";
             license = licenses.mit;
           };

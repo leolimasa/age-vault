@@ -1,6 +1,6 @@
 # age-vault
 
-Share secrets across machines. Built on top of the `age` encryption tool. Features:
+Share secrets across machines. Built on top of the `age` encryption tool.
 
 * Machine private keys never leave the HSM.
 * Built-in ssh agent.

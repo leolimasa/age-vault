@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-age-vault
+/age-vault
 
 # Test binary, built with `go test -c`
 *.test
