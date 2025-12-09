@@ -1,6 +1,6 @@
 # age-vault
 
-Share secrets across machines. One private key per machine. Keys never leaves the HSM. Built on top of the `age` encryption tool.
+Share secrets across machines. One private key per machine. Keys never leave the HSM. Built on top of the `age` encryption tool.
 
 ## Example
 
