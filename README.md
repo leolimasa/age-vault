@@ -1,12 +1,20 @@
 # age-vault
 
-Share secrets across machines. One private key per machine. Keys never leave the HSM. Built on top of the `age` encryption tool.
+Share secrets across machines. Built on top of the `age` encryption tool. Features:
+
+* Machine private keys never leave the HSM.
+* Built-in ssh agent.
+* `sops` integration.
+* For git repos and untrusted environments.
+* Shared vault key encrypted by each machine's HSM private key.
+* Vault key is never decrypted to disk.
 
 ## Example
 
 ```bash
 
-# Create age identity (use any age plugin) and initialize vault
+# Create machine private key (use any age plugin) and initialize vault.
+# It creates a vault key encrypted by the age identity.
 age-plugin-tpm --generate -o age_identity.txt
 age-vault vault-key from-identity age_identity.txt
 
@@ -104,4 +112,4 @@ The solution was to create a master key which is decrypted by the private keys o
 
 This is a very simple system, and was not designed for large teams or enterprises. It is meant for personal use or small teams where trust is not an issue. 
 
-A key revocation mechanism is not present. Once a user is removed the entire vault needs to be re-encrypted with a new vault key. The easiest way to revoke a machine/user is to delete its private key from the HSM.
+There is no key revocation mechanism. Once a user is removed the entire vault needs to be re-encrypted with a new vault key. The easiest way to revoke a machine/user is to delete its private key from the HSM.
