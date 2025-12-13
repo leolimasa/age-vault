@@ -1,11 +1,11 @@
 package commands
 
 import (
-	"filippo.io/age"
 	"fmt"
 	"io"
 	"os"
 
+	"filippo.io/age"
 	"github.com/leolimasa/age-vault/config"
 	"github.com/leolimasa/age-vault/keymgmt"
 	"github.com/leolimasa/age-vault/vault"
@@ -33,11 +33,10 @@ func RunVaultKeyEncrypt(pubKeyPath, outputPath string, cfg *config.Config) error
 		}
 
 		// Get our recipient (public key) from our identity
-		userX25519, ok := userIdentity.(*age.X25519Identity)
-		if !ok {
-			return fmt.Errorf("identity must be an X25519Identity")
+		userRecipient, err := keymgmt.ExtractRecipient(userIdentity)
+		if err != nil {
+			return fmt.Errorf("failed to extract recipient from identity: %w", err)
 		}
-		userRecipient := userX25519.Recipient()
 
 		// Encrypt vault key for ourselves
 		encryptedForUs, err := vault.EncryptVaultKey(identity, userRecipient)

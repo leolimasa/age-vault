@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"filippo.io/age"
 	"fmt"
 	"io"
 	"os"
@@ -13,21 +12,12 @@ import (
 // RunIdentityPubkey handles the identity pubkey command.
 // It extracts and outputs the public key from the configured identity file.
 func RunIdentityPubkey(outputPath string, cfg *config.Config) error {
-	// Load the identity
-	identity, err := keymgmt.LoadIdentity(cfg.IdentityFile)
+	// Extract the public key string from the identity file
+	pubKeyStr, err := keymgmt.ExtractRecipientString(cfg.IdentityFile)
 	if err != nil {
-		return fmt.Errorf("failed to load identity: %w", err)
+		return fmt.Errorf("failed to extract public key from identity: %w", err)
 	}
-
-	// Get the public key (recipient) from the identity
-	x25519Identity, ok := identity.(*age.X25519Identity)
-	if !ok {
-		return fmt.Errorf("identity must be an X25519Identity")
-	}
-	recipient := x25519Identity.Recipient()
-
-	// Get the string representation of the public key
-	pubKeyStr := recipient.String() + "\n"
+	pubKeyStr = pubKeyStr + "\n"
 
 	// Open output (file or stdout)
 	var output io.Writer

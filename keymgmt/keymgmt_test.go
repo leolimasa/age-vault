@@ -134,3 +134,57 @@ func TestCopyFile_NonExistentSource(t *testing.T) {
 		t.Error("CopyFile() should fail with non-existent source")
 	}
 }
+
+func TestExtractRecipient(t *testing.T) {
+	// Test with X25519Identity
+	x25519Identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("GenerateX25519Identity() failed: %v", err)
+	}
+
+	recipient, err := ExtractRecipient(x25519Identity)
+	if err != nil {
+		t.Fatalf("ExtractRecipient() failed for X25519Identity: %v", err)
+	}
+
+	if recipient == nil {
+		t.Error("ExtractRecipient() returned nil recipient for X25519Identity")
+	}
+
+	// Verify the recipient matches the expected one by comparing types
+	expectedRecipient := x25519Identity.Recipient()
+	// We can't easily compare recipients directly, but we can check they're both X25519Recipient
+	x25519Recipient, ok := recipient.(*age.X25519Recipient)
+	if !ok {
+		t.Error("ExtractRecipient() did not return an X25519Recipient")
+	}
+	// Compare the string representations
+	if x25519Recipient.String() != expectedRecipient.String() {
+		t.Error("ExtractRecipient() returned different recipient than expected")
+	}
+}
+
+func TestExtractRecipient_PluginIdentity(t *testing.T) {
+	// We can't easily test with a real plugin identity without the plugin binary,
+	// but we can create a mock that implements the necessary interface
+	// For now, skip this test or implement a minimal mock if needed
+	t.Skip("Plugin identity testing requires actual plugin binary")
+}
+
+// mockIdentity is a mock type that implements age.Identity for testing
+type mockIdentity struct{}
+
+// Unwrap implements the age.Identity interface
+func (m *mockIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
+	return nil, nil
+}
+
+func TestExtractRecipient_UnsupportedType(t *testing.T) {
+	// Test with an unsupported identity type
+	var mock age.Identity = &mockIdentity{}
+
+	_, err := ExtractRecipient(mock)
+	if err == nil {
+		t.Error("ExtractRecipient() should fail with unsupported identity type")
+	}
+}

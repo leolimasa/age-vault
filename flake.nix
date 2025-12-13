@@ -46,6 +46,9 @@
             age
             sops
             openssh
+            age-plugin-tpm
+            swtpm
+            tpm2-tools
           ];
 
           shellHook = ''

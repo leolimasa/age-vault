@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 
 	"filippo.io/age"
 )
@@ -28,6 +29,9 @@ func GenerateVaultKey() (age.Identity, error) {
 // EncryptVaultKey encrypts a vault key identity for a specific recipient (user's public key).
 // Returns the encrypted vault key bytes that can be stored and distributed to users.
 func EncryptVaultKey(vaultKey age.Identity, recipientPubKey age.Recipient) ([]byte, error) {
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Starting encryption\n")
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Recipient type: %T\n", recipientPubKey)
+
 	// Convert the vault key identity to its string representation
 	// X25519Identity has a String() method
 	x25519Identity, ok := vaultKey.(*age.X25519Identity)
@@ -35,30 +39,38 @@ func EncryptVaultKey(vaultKey age.Identity, recipientPubKey age.Recipient) ([]by
 		return nil, fmt.Errorf("vault key must be an X25519Identity")
 	}
 	vaultKeyStr := x25519Identity.String()
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Vault key converted to string\n")
 
 	// Create a buffer to hold the encrypted vault key
 	var encryptedBuf bytes.Buffer
 
 	// Create an encryptor for the recipient
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Creating encryptor...\n")
 	w, err := age.Encrypt(&encryptedBuf, recipientPubKey)
 	if err != nil {
 		return nil, fmt.Errorf("error creating encryptor: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Encryptor created\n")
 
 	// Write the vault key to the encryptor
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Writing vault key to encryptor...\n")
 	if _, err := io.WriteString(w, vaultKeyStr); err != nil {
 		return nil, fmt.Errorf("error writing vault key: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Vault key written\n")
 
 	// Close the encryptor to finalize encryption
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Closing encryptor...\n")
 	if err := w.Close(); err != nil {
 		return nil, fmt.Errorf("error closing encryptor: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "[DEBUG vault.EncryptVaultKey] Encryptor closed successfully\n")
 
 	return encryptedBuf.Bytes(), nil
 }
 
 // DecryptVaultKey decrypts an encrypted vault key using the user's identity (private key).
+// Supports both native X25519 identities and plugin-based identities.
 // Returns a VaultKey wrapper containing the decrypted vault key ready for use.
 func DecryptVaultKey(encryptedKey []byte, userIdentity age.Identity) (*VaultKey, error) {
 	// Create a reader for the encrypted vault key
