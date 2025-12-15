@@ -121,6 +121,23 @@ func findAndLoadYAMLConfig() (yamlConfig, string, error) {
 		currentDir = parentDir
 	}
 
+	// No config file found in parent directories, try default location
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		defaultConfigPath := filepath.Join(homeDir, ".config", ".age-vault", "age_vault.yml")
+		if _, err := os.Stat(defaultConfigPath); err == nil {
+			// File exists at default location
+			data, err := os.ReadFile(defaultConfigPath)
+			if err != nil {
+				return cfg, "", fmt.Errorf("error reading default config file %s: %w", defaultConfigPath, err)
+			}
+			if err := yaml.Unmarshal(data, &cfg); err != nil {
+				return cfg, "", fmt.Errorf("error parsing default config file %s: %w", defaultConfigPath, err)
+			}
+			return cfg, filepath.Join(homeDir, ".config", ".age-vault"), nil
+		}
+	}
+
 	return cfg, "", nil // No config file found, return empty config
 }
 

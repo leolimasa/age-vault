@@ -7,29 +7,15 @@ import (
 
 	"github.com/leolimasa/age-vault/config"
 	"github.com/leolimasa/age-vault/keymgmt"
-	"github.com/leolimasa/age-vault/vault"
 )
 
 // RunDecrypt handles the decrypt command.
 // It loads the user's identity, decrypts the vault key, and decrypts data from input to output.
 func RunDecrypt(inputPath, outputPath string, cfg *config.Config) error {
-	// Load user's identity
-	userIdentity, err := keymgmt.LoadIdentity(cfg.IdentityFile)
+	// Load and decrypt vault key
+	vaultKey, err := keymgmt.VaultKeyFromIdentityFile(cfg.IdentityFile, cfg.VaultKeyFile)
 	if err != nil {
-		return fmt.Errorf("failed to load identity: %w", err)
-	}
-
-	// Read encrypted vault key
-	// REVIEW this should be a common function to read and decrypt vault keys
-	encryptedVaultKey, err := os.ReadFile(cfg.VaultKeyFile)
-	if err != nil {
-		return fmt.Errorf("failed to read vault key file: %w", err)
-	}
-
-	// Decrypt vault key
-	vaultKey, err := vault.DecryptVaultKey(encryptedVaultKey, userIdentity)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt vault key: %w", err)
+		return fmt.Errorf("failed to load vault key: %w", err)
 	}
 
 	// Open input (file or stdin)

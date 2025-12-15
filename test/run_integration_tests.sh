@@ -74,7 +74,7 @@ mkdir -p "$AGE_VAULT_SSH_KEYS_DIR"
 
 # Test 1a: Initialize vault with env vars
 log_info "Test 1a: Initialize vault with env vars"
-if $AGE_VAULT vault-key from-identity > /dev/null 2>&1; then
+if $AGE_VAULT vault-key encrypt --identity "$AGE_VAULT_IDENTITY_FILE" > /dev/null 2>&1; then
     if [ -f "$AGE_VAULT_KEY_FILE" ]; then
         log_success "Test 1a: Vault key created successfully"
     else
@@ -84,11 +84,17 @@ else
     log_error "Test 1a: Failed to create vault key"
 fi
 
-# Test that it fails on second run
-if $AGE_VAULT vault-key from-identity > /dev/null 2>&1; then
-    log_error "Test 1a: Command should fail on second run"
+# Test that vault key is reusable (encrypt should work again for a different recipient)
+# Generate a third identity to test
+age-keygen -o identity_test.txt 2>&1 | grep -v "^#"
+if $AGE_VAULT vault-key encrypt --identity identity_test.txt -o vault_key_test.age > /dev/null 2>&1; then
+    if [ -f "vault_key_test.age" ]; then
+        log_success "Test 1a: Vault key encrypt can be reused for different recipients"
+    else
+        log_error "Test 1a: Vault key encrypt output file not created"
+    fi
 else
-    log_success "Test 1a: Command correctly fails when vault key exists"
+    log_error "Test 1a: Failed to encrypt vault key for another recipient"
 fi
 
 # Test 1b: Encrypt/decrypt data with env vars
@@ -128,7 +134,7 @@ echo "$PUBKEY" > pubkey.txt
 export AGE_VAULT_IDENTITY_FILE="$ORIG_IDENTITY"
 
 # Encrypt vault key for new user using their public key
-if $AGE_VAULT vault-key encrypt pubkey.txt -o vault_key_for_user2.age > /dev/null 2>&1; then
+if $AGE_VAULT vault-key encrypt --pubkey-file pubkey.txt -o vault_key_for_user2.age > /dev/null 2>&1; then
     # Simulate new user: set their identity and the encrypted vault key file
     export AGE_VAULT_IDENTITY_FILE="$TEST1_DIR/identity2.txt"
     export AGE_VAULT_KEY_FILE="$TEST1_DIR/vault_key_for_user2.age"
@@ -267,7 +273,7 @@ EOF
 # Test 2a: Initialize vault with config file
 log_info "Test 2a: Initialize vault with config file"
 cd "$TEST2_DIR"
-if $AGE_VAULT vault-key from-identity > /dev/null 2>&1; then
+if $AGE_VAULT vault-key encrypt --identity ./vault/identity.txt > /dev/null 2>&1; then
     if [ -f "$TEST2_DIR/vault/vault_key.age" ]; then
         log_success "Test 2a: Vault key created at correct relative path"
     else
@@ -377,7 +383,7 @@ else
     export AGE_VAULT_KEY_FILE="$TEST3_DIR/vault_key.age"
 
     # Initialize vault
-    $AGE_VAULT vault-key from-identity > /dev/null 2>&1
+    $AGE_VAULT vault-key encrypt --identity "$AGE_VAULT_IDENTITY_FILE" > /dev/null 2>&1
 
     # Test 3a: SOPS encrypt with age-vault
     log_info "Test 3a: SOPS encrypt with age-vault"

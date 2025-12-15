@@ -25,7 +25,7 @@ age-vault encrypt test_file.txt -o test_file.txt.age
 age-vault decrypt test_file.txt.age
 
 # Add another machine/user to the vault (public key created on the other machine)
-age-vault vault-key encrypt new_machine_public_key.txt -o new_machine_vault_key.txt
+age-vault vault-key encrypt --pubkey-file new_machine_public_key.txt -o new_machine_vault_key.txt
 
 # Import a vault key (created by another machine that has access to the vault)
 age-vault vault-key set new_machine_vault_key.txt
@@ -43,9 +43,14 @@ age-vault vault-key set new_machine_vault_key.txt
 
 ### Key management
 
-* `age-vault vault-key encrypt --pubkey [public key file]`: encrypts the vault key with the provided public key and returns the encrypted version. If a vault key does not yet exist, one is created and then encrypted using the provided key. Will output to stdout unless `-o [output file]` is provided.
+* `age-vault vault-key encrypt`: encrypts the vault key for a recipient and saves it. If a vault key does not yet exist, one is created and then encrypted using the configured identity. Supports three ways to specify the recipient:
+  * `--pubkey [public key string]`: encrypts using a public key string
+  * `--pubkey-file [public key file]`: encrypts using a public key from a file
+  * `--identity [identity file]`: extracts the public key from an identity file and encrypts with it
+  * Saves to `AGE_VAULT_KEY_FILE` by default, or use `-o [output file]` to specify a different location
+* `age-vault vault-key pubkey`: outputs the public key for the vault key. Will output to stdout unless `-o [output file]` is provided.
 * `age-vault vault-key set [encrypted key file]`: copies the provided encrypted vault key file to `AGE_VAULT_KEY_FILE`.
-* `age-vault identity set [identity file]`: copies the identity file to the `AGE_VAULT_IDENTITY_FILE` localtion.
+* `age-vault identity set [identity file]`: copies the identity file to the `AGE_VAULT_IDENTITY_FILE` location.
 * `age-vault identity pubkey`: outputs the public key corresponding to the identity in `AGE_VAULT_IDENTITY_FILE`. Will output to stdout unless `-o [output file]` is provided.
 
 ## Config
@@ -58,7 +63,11 @@ age-vault vault-key set new_machine_vault_key.txt
 
 **age_vault.yml config file:**
 
-You can also create a config file `age_vault.yml` to set the above variables. It will be automatically detected by traversing up the directory tree from the current working directory. This makes it easy to have per-project vault configurations.
+You can also create a config file `age_vault.yml` to set the above variables. It will be automatically detected by:
+1. Traversing up the directory tree from the current working directory
+2. If not found, checking the default location at `~/.config/.age-vault/age_vault.yml`
+
+This makes it easy to have per-project vault configurations or a global default configuration.
 
 Example config file:
 
@@ -72,7 +81,7 @@ ssh_keys_dir: path/to/ssh_keys/
 
 * Create a new age identity using one of the `age` keygen commands (like `age-plugin-tpm`)
 * Move the newly created identity into the age vault using: `age-vault identity set [identity file]`
-* Initialize the vault key using `age-vault vault-key from-identity`
+* Initialize the vault key using `age-vault vault-key encrypt --identity [identity file]`
 
 ## New user/machine workflow
 
@@ -86,7 +95,7 @@ Follow this workflow to add a new user/machine to the vault:
 
 **On another machine already setup with the vault:**
 
-* Run `age-vault vault-key encrypt -o [user@machine.age] [pubkeyfile]` to get the encrypted vault key for that user/machine
+* Run `age-vault vault-key encrypt --pubkey-file [pubkeyfile] -o [user@machine.age]` to get the encrypted vault key for that user/machine
 * Send the encrypted vault key back to the target machine 
 
 **Back on the target machine:**

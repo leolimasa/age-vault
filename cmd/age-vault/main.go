@@ -85,16 +85,25 @@ centralized vault key system. Built on top of the age encryption tool.`,
 
 	// Add vault-key encrypt subcommand
 	var vaultKeyEncryptOutput string
+	var vaultKeyEncryptPubkey string
+	var vaultKeyEncryptPubkeyFile string
+	var vaultKeyEncryptIdentity string
+
 	vaultKeyEncryptCmd := &cobra.Command{
-		Use:   "encrypt [public-key-file]",
-		Short: "Encrypt vault key for a new user",
-		Long:  "Encrypts the vault key for a recipient's public key. Creates a new vault key if none exists.",
-		Args:  cobra.ExactArgs(1),
+		Use:   "encrypt",
+		Short: "Encrypt vault key for a new recipient",
+		Long:  "Encrypts the vault key for a recipient. Use --pubkey, --pubkey-file, or --identity to specify the recipient.",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return commands.RunVaultKeyEncrypt(args[0], vaultKeyEncryptOutput, cfg)
+			return commands.RunVaultKeyEncrypt(vaultKeyEncryptPubkey, vaultKeyEncryptPubkeyFile, vaultKeyEncryptIdentity, vaultKeyEncryptOutput, cfg)
 		},
 	}
+	vaultKeyEncryptCmd.Flags().StringVar(&vaultKeyEncryptPubkey, "pubkey", "", "Public key string")
+	vaultKeyEncryptCmd.Flags().StringVar(&vaultKeyEncryptPubkeyFile, "pubkey-file", "", "Path to public key file")
+	vaultKeyEncryptCmd.Flags().StringVar(&vaultKeyEncryptIdentity, "identity", "", "Path to identity file (public key will be extracted)")
 	vaultKeyEncryptCmd.Flags().StringVarP(&vaultKeyEncryptOutput, "output", "o", "", "Output file (default: stdout)")
+	vaultKeyEncryptCmd.MarkFlagsMutuallyExclusive("pubkey", "pubkey-file", "identity")
+	vaultKeyEncryptCmd.MarkFlagsOneRequired("pubkey", "pubkey-file", "identity")
 	vaultKeyCmd.AddCommand(vaultKeyEncryptCmd)
 
 	// Add vault-key set subcommand
@@ -108,18 +117,6 @@ centralized vault key system. Built on top of the age encryption tool.`,
 		},
 	}
 	vaultKeyCmd.AddCommand(vaultKeySetCmd)
-
-	// Add vault-key from-identity subcommand
-	vaultKeyFromIdentityCmd := &cobra.Command{
-		Use:   "from-identity",
-		Short: "Initialize vault key from identity",
-		Long:  "Creates a new vault key encrypted with the identity in AGE_VAULT_IDENTITY_FILE.",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return commands.RunVaultKeyFromIdentity(cfg)
-		},
-	}
-	vaultKeyCmd.AddCommand(vaultKeyFromIdentityCmd)
 
 	// Add vault-key pubkey subcommand
 	var vaultKeyPubkeyOutput string

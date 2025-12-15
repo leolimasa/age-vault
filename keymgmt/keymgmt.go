@@ -3,18 +3,88 @@
 package keymgmt
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"filippo.io/age"
 	"filippo.io/age/plugin"
+	"golang.org/x/term"
 
 	// REVIEW: why are you using fully qualified domain names for local files??
 	"github.com/leolimasa/age-vault/config"
 	"github.com/leolimasa/age-vault/vault"
 )
+
+// NewClientUI creates and returns a configured plugin.ClientUI instance
+// that properly prompts the user for input when needed.
+func NewClientUI() *plugin.ClientUI {
+	return &plugin.ClientUI{
+		DisplayMessage: func(name, message string) error {
+			fmt.Fprintf(os.Stderr, "[PLUGIN %s] %s\n", name, message)
+			return nil
+		},
+		RequestValue: func(name, prompt string, secret bool) (string, error) {
+			fmt.Fprintf(os.Stderr, "[PLUGIN %s] %s", name, prompt)
+			if !strings.HasSuffix(prompt, ": ") && !strings.HasSuffix(prompt, ":") {
+				fmt.Fprintf(os.Stderr, ": ")
+			}
+
+			if secret {
+				// Read password securely without echoing
+				passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+				fmt.Fprintf(os.Stderr, "\n")
+				if err != nil {
+					return "", fmt.Errorf("failed to read secret value: %w", err)
+				}
+				return string(passwordBytes), nil
+			}
+
+			// Read regular input
+			reader := bufio.NewReader(os.Stdin)
+			value, err := reader.ReadString('\n')
+			if err != nil {
+				return "", fmt.Errorf("failed to read value: %w", err)
+			}
+			return strings.TrimSpace(value), nil
+		},
+		Confirm: func(name, prompt, yes, no string) (bool, error) {
+			fmt.Fprintf(os.Stderr, "[PLUGIN %s] %s", name, prompt)
+			if yes != "" && no != "" {
+				fmt.Fprintf(os.Stderr, " [%s/%s]", yes, no)
+			}
+			fmt.Fprintf(os.Stderr, ": ")
+
+			reader := bufio.NewReader(os.Stdin)
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				return false, fmt.Errorf("failed to read confirmation: %w", err)
+			}
+			response = strings.ToLower(strings.TrimSpace(response))
+
+			// Check if response matches the "yes" option
+			if yes != "" {
+				yesLower := strings.ToLower(yes)
+				if response == yesLower || response == string(yesLower[0]) {
+					return true, nil
+				}
+			} else {
+				// Default yes options
+				if response == "y" || response == "yes" {
+					return true, nil
+				}
+			}
+
+			return false, nil
+		},
+		WaitTimer: func(name string) {
+			fmt.Fprintf(os.Stderr, "[PLUGIN %s] Waiting...\n", name)
+		},
+	}
+}
 
 // LoadIdentity reads and parses an age identity file from the given path.
 // Supports both native X25519 identities and plugin-based identities.
@@ -32,9 +102,8 @@ func LoadIdentity(path string) (age.Identity, error) {
 		return identities[0], nil
 	}
 
-	// If that failed, try parsing as plugin identity
-	// Plugin identities have the format: AGE-PLUGIN-{NAME}-{DATA}
-	// Need to extract just the identity line (skip comments starting with #)
+	// If native parsing failed, try as plugin identity
+	// Extract the identity line (skip comments and empty lines)
 	var identityStr string
 	lines := bytes.Split(content, []byte("\n"))
 	for _, line := range lines {
@@ -43,44 +112,17 @@ func LoadIdentity(path string) (age.Identity, error) {
 		if len(trimmed) == 0 || bytes.HasPrefix(trimmed, []byte("#")) {
 			continue
 		}
-		// Found the identity line
-		if bytes.HasPrefix(trimmed, []byte("AGE-PLUGIN-")) {
-			identityStr = string(trimmed)
-			break
-		}
+		// Found a non-comment line - assume it's the identity
+		identityStr = string(trimmed)
+		break
 	}
 
 	if identityStr == "" {
 		return nil, fmt.Errorf("no identity found in file %s", path)
 	}
 
-	// We need to create a ClientUI for the plugin
-	// REVIEW: you are recreating this several times on the same file. Have it share the same client UI
-	ui := &plugin.ClientUI{
-		DisplayMessage: func(name, message string) error {
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] %s\n", name, message)
-			return nil
-		},
-		RequestValue: func(name, prompt string, secret bool) (string, error) {
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] RequestValue called: %s (secret=%v)\n", name, prompt, secret)
-			// Return empty string for non-secret prompts, error for secret ones
-			if secret {
-				return "", fmt.Errorf("cannot provide secret values in non-interactive mode")
-			}
-			return "", nil
-		},
-		Confirm: func(name, prompt, yes, no string) (bool, error) {
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] Confirm called: %s (yes=%s, no=%s)\n", name, prompt, yes, no)
-			// Auto-confirm to proceed without user interaction
-			// REVIEW: Don't just auto confirm. Prompte the user.
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] Auto-confirming (returning yes)\n", name)
-			return true, nil
-		},
-		WaitTimer: func(name string) {
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] WaitTimer called - plugin is waiting...\n", name)
-		},
-	}
-
+	// Try loading as plugin identity with proper UI
+	ui := NewClientUI()
 	pluginIdentity, pluginErr := plugin.NewIdentity(identityStr, ui)
 	if pluginErr == nil {
 		return pluginIdentity, nil
@@ -88,71 +130,6 @@ func LoadIdentity(path string) (age.Identity, error) {
 
 	// If both failed, return an appropriate error
 	return nil, fmt.Errorf("error parsing identity file %s as native identity: %w, as plugin identity: %v", path, err, pluginErr)
-}
-
-// LoadRecipient reads and parses an age public key file from the given path.
-// Supports both native X25519 recipients and plugin-based recipients.
-// Returns the first recipient found in the file.
-func LoadRecipient(path string) (age.Recipient, error) {
-	// Read the recipient file content
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("error reading recipient file %s: %w", path, err)
-	}
-
-	// Try parsing as native age recipients first
-	recipients, err := age.ParseRecipients(bytes.NewReader(content))
-	if err == nil && len(recipients) > 0 {
-		return recipients[0], nil
-	}
-
-	// If that failed, try parsing as plugin recipient
-	// Plugin recipients have the format: age1{name}{data}
-	// Need to extract just the recipient line (skip comments starting with #)
-	var recipientStr string
-	lines := bytes.Split(content, []byte("\n"))
-	for _, line := range lines {
-		trimmed := bytes.TrimSpace(line)
-		// Skip empty lines and comments
-		if len(trimmed) == 0 || bytes.HasPrefix(trimmed, []byte("#")) {
-			continue
-		}
-		// Found a recipient line (starts with age1)
-		if bytes.HasPrefix(trimmed, []byte("age1")) {
-			recipientStr = string(trimmed)
-			break
-		}
-	}
-
-	if recipientStr == "" {
-		return nil, fmt.Errorf("no recipient found in file %s", path)
-	}
-
-	ui := &plugin.ClientUI{
-		DisplayMessage: func(name, message string) error {
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] %s\n", name, message)
-			return nil
-		},
-		RequestValue: func(name, prompt string, secret bool) (string, error) {
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] RequestValue called: %s (secret=%v)\n", name, prompt, secret)
-			return "", fmt.Errorf("interactive prompts not supported")
-		},
-		Confirm: func(name, prompt, yes, no string) (bool, error) {
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] Confirm called: %s (yes=%s, no=%s)\n", name, prompt, yes, no)
-			return false, fmt.Errorf("interactive prompts not supported")
-		},
-		WaitTimer: func(name string) {
-			fmt.Fprintf(os.Stderr, "[PLUGIN %s] WaitTimer called - plugin is waiting...\n", name)
-		},
-	}
-
-	pluginRecipient, pluginErr := plugin.NewRecipient(recipientStr, ui)
-	if pluginErr == nil {
-		return pluginRecipient, nil
-	}
-
-	// If both failed, return an appropriate error
-	return nil, fmt.Errorf("error parsing recipient file %s as native recipient: %w, as plugin recipient: %v", path, err, pluginErr)
 }
 
 // ExtractRecipient extracts a recipient (public key) from any age.Identity,
@@ -168,49 +145,81 @@ func ExtractRecipient(identity age.Identity) (age.Recipient, error) {
 	}
 }
 
-// ExtractRecipientString extracts the public key string from an identity file.
-// This is useful for displaying the public key without needing to convert
-// from a Recipient object (which plugin recipients don't support).
-// For plugin identities, it looks for a "# public key:" comment in the identity file.
+// RecipientToString converts a recipient to its string representation.
+// For X25519Recipients, it uses the String() method.
+// For plugin Recipients, we need to read the public key from the identity file comments.
+func RecipientToString(recipient age.Recipient) (string, error) {
+	switch r := recipient.(type) {
+	case *age.X25519Recipient:
+		return r.String(), nil
+	default:
+		// For plugin recipients or other types, we can't easily get the string
+		return "", fmt.Errorf("cannot convert recipient type %T to string directly; for plugin recipients, extract the public key from the identity file comments", recipient)
+	}
+}
+
+// ExtractRecipientString extracts the public key string from an identity.
+// For X25519 identities, it gets the recipient and converts to string.
+// For plugin identities, it reads the public key from the identity file comments.
 func ExtractRecipientString(identityPath string) (string, error) {
-	// Load the identity
 	identity, err := LoadIdentity(identityPath)
 	if err != nil {
 		return "", err
 	}
 
-	// Handle based on identity type
-	switch id := identity.(type) {
-	case *age.X25519Identity:
-		// For X25519, we can get the recipient and convert to string
-		return id.Recipient().String(), nil
-	case *plugin.Identity:
-		// For plugin identities, read the file and look for the public key in comments
-		// Plugin identity files typically include a "# public key: age1..." line
+	// For X25519, we can get the recipient and convert to string
+	if x25519Identity, ok := identity.(*age.X25519Identity); ok {
+		return x25519Identity.Recipient().String(), nil
+	}
+
+	// For plugin identities, read the public key from file comments
+	if _, ok := identity.(*plugin.Identity); ok {
 		content, err := os.ReadFile(identityPath)
 		if err != nil {
 			return "", fmt.Errorf("failed to read identity file: %w", err)
 		}
 
-		// Look for lines starting with "# public key:" or "# recipient:" (case-insensitive)
+		// Look for public key in comments
 		lines := bytes.Split(content, []byte("\n"))
 		for _, line := range lines {
 			trimmed := bytes.TrimSpace(line)
 			lowerLine := bytes.ToLower(trimmed)
 			if bytes.HasPrefix(lowerLine, []byte("# public key:")) || bytes.HasPrefix(lowerLine, []byte("# recipient:")) {
-				// Extract the key after the colon
 				parts := bytes.SplitN(trimmed, []byte(":"), 2)
 				if len(parts) == 2 {
 					return string(bytes.TrimSpace(parts[1])), nil
 				}
 			}
 		}
-
-		// If we couldn't find the recipient in comments, return an error
-		return "", fmt.Errorf("could not find public key in identity file; plugin identity files should include a '# public key: age1...' comment line")
-	default:
-		return "", fmt.Errorf("unsupported identity type: %T", identity)
+		return "", fmt.Errorf("could not find public key in plugin identity file; plugin identity files should include a '# public key: age1...' comment line")
 	}
+
+	return "", fmt.Errorf("unsupported identity type: %T", identity)
+}
+
+// VaultKeyFromIdentityFile loads a user identity from file, reads the encrypted
+// vault key from disk, decrypts it using the identity, and returns the decrypted
+// vault key wrapped in a vault.VaultKey object.
+func VaultKeyFromIdentityFile(identityFilePath string, vaultKeyFilePath string) (*vault.VaultKey, error) {
+	// Load user's identity
+	userIdentity, err := LoadIdentity(identityFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load identity: %w", err)
+	}
+
+	// Read encrypted vault key
+	encryptedVaultKey, err := os.ReadFile(vaultKeyFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read vault key file: %w", err)
+	}
+
+	// Decrypt vault key
+	vaultKey, err := vault.DecryptVaultKey(encryptedVaultKey, userIdentity)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt vault key: %w", err)
+	}
+
+	return vaultKey, nil
 }
 
 // CopyFile copies a file from source to destination with secure permissions (0600).
@@ -254,29 +263,13 @@ func GetOrCreateVaultKey(cfg *config.Config) (age.Identity, error) {
 		return nil, fmt.Errorf("failed to check vault key file: %w", err)
 	}
 
-	// Vault key exists, load and decrypt it
-	userIdentity, err := LoadIdentity(cfg.IdentityFile)
+	// Vault key exists, load and decrypt it using helper function
+	vaultKey, err := VaultKeyFromIdentityFile(cfg.IdentityFile, cfg.VaultKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load identity: %w", err)
+		return nil, fmt.Errorf("failed to load vault key: %w", err)
 	}
 
-	encryptedVaultKey, err := os.ReadFile(cfg.VaultKeyFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read vault key file: %w", err)
-	}
-
-	vaultKey, err := vault.DecryptVaultKey(encryptedVaultKey, userIdentity)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt vault key: %w", err)
-	}
-
-	// Extract and return the vault key identity
-	vaultKeyIdentity, err := vaultKey.GetIdentity()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get vault key identity: %w", err)
-	}
-
-	return vaultKeyIdentity, nil
+	return vaultKey.GetIdentity()
 }
 
 // SaveVaultKeyForIdentity encrypts a vault key for a specific identity and saves it to disk.
