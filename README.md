@@ -16,7 +16,7 @@ Share secrets across machines. Built on top of the `age` encryption tool.
 # Create machine private key (use any age plugin) and initialize vault.
 # It creates a vault key encrypted by the age identity.
 age-plugin-tpm --generate -o age_identity.txt
-age-vault vault-key from-identity age_identity.txt
+age-vault vault-key encrypt --identity age_identity.txt
 
 # Encrypt a file
 age-vault encrypt test_file.txt -o test_file.txt.age
@@ -43,8 +43,7 @@ age-vault vault-key set new_machine_vault_key.txt
 
 ### Key management
 
-* `age-vault vault-key from-identity`: creates a new vault key encrypted with the identity present in `AGE_VAULT_IDENTITY_FILE` and saves it to `AGE_VAULT_KEY_FILE`. Fails if a vault key already exists.
-* `age-vault vault-key encrypt [public key file]`: encrypts the vault key with the provided public key and returns the encrypted version. If a vault key does not yet exist (`AGE_VAULT_KEY_FILE` doesn't exist), one is created and then encrypted using the provided key. Will output to stdout unless `-o [output file]` is provided.
+* `age-vault vault-key encrypt --pubkey [public key file]`: encrypts the vault key with the provided public key and returns the encrypted version. If a vault key does not yet exist, one is created and then encrypted using the provided key. Will output to stdout unless `-o [output file]` is provided.
 * `age-vault vault-key set [encrypted key file]`: copies the provided encrypted vault key file to `AGE_VAULT_KEY_FILE`.
 * `age-vault identity set [identity file]`: copies the identity file to the `AGE_VAULT_IDENTITY_FILE` localtion.
 * `age-vault identity pubkey`: outputs the public key corresponding to the identity in `AGE_VAULT_IDENTITY_FILE`. Will output to stdout unless `-o [output file]` is provided.

@@ -20,6 +20,7 @@ func RunDecrypt(inputPath, outputPath string, cfg *config.Config) error {
 	}
 
 	// Read encrypted vault key
+	// REVIEW this should be a common function to read and decrypt vault keys
 	encryptedVaultKey, err := os.ReadFile(cfg.VaultKeyFile)
 	if err != nil {
 		return fmt.Errorf("failed to read vault key file: %w", err)
