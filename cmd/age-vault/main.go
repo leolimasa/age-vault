@@ -87,23 +87,23 @@ centralized vault key system. Built on top of the age encryption tool.`,
 	var vaultKeyEncryptOutput string
 	var vaultKeyEncryptPubkey string
 	var vaultKeyEncryptPubkeyFile string
-	var vaultKeyEncryptIdentity string
+	var vaultKeyEncryptSave bool
 
 	vaultKeyEncryptCmd := &cobra.Command{
 		Use:   "encrypt",
 		Short: "Encrypt vault key for a new recipient",
-		Long:  "Encrypts the vault key for a recipient. Use --pubkey, --pubkey-file, or --identity to specify the recipient.",
+		Long:  "Encrypts the vault key for a recipient. Use --pubkey or --pubkey-file to specify the recipient's public key. Outputs to stdout by default.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return commands.RunVaultKeyEncrypt(vaultKeyEncryptPubkey, vaultKeyEncryptPubkeyFile, vaultKeyEncryptIdentity, vaultKeyEncryptOutput, cfg)
+			return commands.RunVaultKeyEncrypt(vaultKeyEncryptPubkey, vaultKeyEncryptPubkeyFile, vaultKeyEncryptOutput, vaultKeyEncryptSave, cfg)
 		},
 	}
 	vaultKeyEncryptCmd.Flags().StringVar(&vaultKeyEncryptPubkey, "pubkey", "", "Public key string")
 	vaultKeyEncryptCmd.Flags().StringVar(&vaultKeyEncryptPubkeyFile, "pubkey-file", "", "Path to public key file")
-	vaultKeyEncryptCmd.Flags().StringVar(&vaultKeyEncryptIdentity, "identity", "", "Path to identity file (public key will be extracted)")
 	vaultKeyEncryptCmd.Flags().StringVarP(&vaultKeyEncryptOutput, "output", "o", "", "Output file (default: stdout)")
-	vaultKeyEncryptCmd.MarkFlagsMutuallyExclusive("pubkey", "pubkey-file", "identity")
-	vaultKeyEncryptCmd.MarkFlagsOneRequired("pubkey", "pubkey-file", "identity")
+	vaultKeyEncryptCmd.Flags().BoolVar(&vaultKeyEncryptSave, "save", false, "Save to configured vault key location instead of stdout")
+	vaultKeyEncryptCmd.MarkFlagsMutuallyExclusive("pubkey", "pubkey-file")
+	vaultKeyEncryptCmd.MarkFlagsOneRequired("pubkey", "pubkey-file")
 	vaultKeyCmd.AddCommand(vaultKeyEncryptCmd)
 
 	// Add vault-key set subcommand

@@ -74,7 +74,9 @@ mkdir -p "$AGE_VAULT_SSH_KEYS_DIR"
 
 # Test 1a: Initialize vault with env vars
 log_info "Test 1a: Initialize vault with env vars"
-if $AGE_VAULT vault-key encrypt --identity "$AGE_VAULT_IDENTITY_FILE" > /dev/null 2>&1; then
+# Extract public key from identity
+PUBKEY=$(age-keygen -y "$AGE_VAULT_IDENTITY_FILE" 2>&1)
+if $AGE_VAULT vault-key encrypt --pubkey "$PUBKEY" --save > /dev/null 2>&1; then
     if [ -f "$AGE_VAULT_KEY_FILE" ]; then
         log_success "Test 1a: Vault key created successfully"
     else
@@ -87,7 +89,8 @@ fi
 # Test that vault key is reusable (encrypt should work again for a different recipient)
 # Generate a third identity to test
 age-keygen -o identity_test.txt 2>&1 | grep -v "^#"
-if $AGE_VAULT vault-key encrypt --identity identity_test.txt -o vault_key_test.age > /dev/null 2>&1; then
+PUBKEY_TEST=$(age-keygen -y identity_test.txt 2>&1)
+if $AGE_VAULT vault-key encrypt --pubkey "$PUBKEY_TEST" -o vault_key_test.age > /dev/null 2>&1; then
     if [ -f "vault_key_test.age" ]; then
         log_success "Test 1a: Vault key encrypt can be reused for different recipients"
     else
@@ -273,7 +276,9 @@ EOF
 # Test 2a: Initialize vault with config file
 log_info "Test 2a: Initialize vault with config file"
 cd "$TEST2_DIR"
-if $AGE_VAULT vault-key encrypt --identity ./vault/identity.txt > /dev/null 2>&1; then
+# Extract public key from identity
+PUBKEY2=$(age-keygen -y ./vault/identity.txt 2>&1)
+if $AGE_VAULT vault-key encrypt --pubkey "$PUBKEY2" --save > /dev/null 2>&1; then
     if [ -f "$TEST2_DIR/vault/vault_key.age" ]; then
         log_success "Test 2a: Vault key created at correct relative path"
     else
@@ -383,7 +388,8 @@ else
     export AGE_VAULT_KEY_FILE="$TEST3_DIR/vault_key.age"
 
     # Initialize vault
-    $AGE_VAULT vault-key encrypt --identity "$AGE_VAULT_IDENTITY_FILE" > /dev/null 2>&1
+    PUBKEY3=$(age-keygen -y "$AGE_VAULT_IDENTITY_FILE" 2>&1)
+    $AGE_VAULT vault-key encrypt --pubkey "$PUBKEY3" --save > /dev/null 2>&1
 
     # Test 3a: SOPS encrypt with age-vault
     log_info "Test 3a: SOPS encrypt with age-vault"

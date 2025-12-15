@@ -14,8 +14,9 @@ import (
 // RunVaultKeyEncrypt handles the vault-key encrypt command.
 // It creates a new vault key if none exists, or loads the existing one,
 // then encrypts it for a new recipient (user's public key).
-// Supports three ways to specify the recipient: --pubkey, --pubkey-file, or --identity.
-func RunVaultKeyEncrypt(pubkey string, pubkeyFile string, identityFile string, outputPath string, cfg *config.Config) error {
+// Supports two ways to specify the recipient: --pubkey or --pubkey-file.
+// Outputs to stdout by default, unless --save or -o is specified.
+func RunVaultKeyEncrypt(pubkey string, pubkeyFile string, outputPath string, save bool, cfg *config.Config) error {
 	// Validate that exactly one recipient source is provided
 	providedCount := 0
 	if pubkey != "" {
@@ -24,11 +25,8 @@ func RunVaultKeyEncrypt(pubkey string, pubkeyFile string, identityFile string, o
 	if pubkeyFile != "" {
 		providedCount++
 	}
-	if identityFile != "" {
-		providedCount++
-	}
 	if providedCount != 1 {
-		return fmt.Errorf("exactly one of --pubkey, --pubkey-file, or --identity must be provided")
+		return fmt.Errorf("exactly one of --pubkey or --pubkey-file must be provided")
 	}
 	var vaultKeyIdentity age.Identity
 
@@ -86,7 +84,6 @@ func RunVaultKeyEncrypt(pubkey string, pubkeyFile string, identityFile string, o
 
 	// Get the recipient based on which flag was provided
 	var recipient age.Recipient
-	var err error
 
 	if pubkey != "" {
 		// Parse recipient from string
@@ -112,16 +109,6 @@ func RunVaultKeyEncrypt(pubkey string, pubkeyFile string, identityFile string, o
 			return fmt.Errorf("no recipient found in public key file")
 		}
 		recipient = recipients[0]
-	} else if identityFile != "" {
-		// Load identity and extract recipient
-		identity, loadErr := keymgmt.LoadIdentity(identityFile)
-		if loadErr != nil {
-			return fmt.Errorf("failed to load identity: %w", loadErr)
-		}
-		recipient, err = keymgmt.ExtractRecipient(identity)
-		if err != nil {
-			return fmt.Errorf("failed to extract recipient from identity: %w", err)
-		}
 	}
 
 	// Encrypt vault key for the recipient
@@ -130,22 +117,31 @@ func RunVaultKeyEncrypt(pubkey string, pubkeyFile string, identityFile string, o
 		return fmt.Errorf("failed to encrypt vault key for recipient: %w", err)
 	}
 
-	// Determine output path (use provided path or default to config vault key file)
-	finalOutputPath := outputPath
-	if finalOutputPath == "" {
-		finalOutputPath = cfg.VaultKeyFile
+	// Determine output destination
+	if outputPath != "" {
+		// Write to specified output file
+		if err := config.EnsureParentDir(outputPath); err != nil {
+			return err
+		}
+		if err := os.WriteFile(outputPath, encryptedKey, 0600); err != nil {
+			return fmt.Errorf("failed to write encrypted vault key: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Vault key encrypted and saved to %s\n", outputPath)
+	} else if save {
+		// Save to config vault key file
+		if err := config.EnsureParentDir(cfg.VaultKeyFile); err != nil {
+			return err
+		}
+		if err := os.WriteFile(cfg.VaultKeyFile, encryptedKey, 0600); err != nil {
+			return fmt.Errorf("failed to write encrypted vault key: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Vault key encrypted and saved to %s\n", cfg.VaultKeyFile)
+	} else {
+		// Output to stdout
+		if _, err := os.Stdout.Write(encryptedKey); err != nil {
+			return fmt.Errorf("failed to write encrypted vault key to stdout: %w", err)
+		}
 	}
 
-	// Ensure parent directory exists
-	if err := config.EnsureParentDir(finalOutputPath); err != nil {
-		return err
-	}
-
-	// Write encrypted vault key to file
-	if err := os.WriteFile(finalOutputPath, encryptedKey, 0600); err != nil {
-		return fmt.Errorf("failed to write encrypted vault key: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Vault key encrypted and saved to %s\n", finalOutputPath)
 	return nil
 }

@@ -13,10 +13,15 @@ Share secrets across machines. Built on top of the `age` encryption tool.
 
 ```bash
 
-# Create machine private key (use any age plugin) and initialize vault.
-# It creates a vault key encrypted by the age identity.
-age-plugin-tpm --generate -o age_identity.txt
-age-vault vault-key encrypt --identity age_identity.txt
+# Create machine private key (use any age plugin) and set it as the default identity
+age-plugin-tpm --generate -o tpm_identity.txt
+age-vault identity set tpm_identity.txt
+
+# Get the public key for the generated private key
+age-plugin-tpm --convert tpm_identity.txt > tpm_pub_key.txt
+
+# Create a new vault key from the public key
+age-vault vault-key encrypt --pubkey-file tpm_pub_key.txt --save
 
 # Encrypt a file
 age-vault encrypt test_file.txt -o test_file.txt.age
@@ -43,11 +48,10 @@ age-vault vault-key set new_machine_vault_key.txt
 
 ### Key management
 
-* `age-vault vault-key encrypt`: encrypts the vault key for a recipient and saves it. If a vault key does not yet exist, one is created and then encrypted using the configured identity. Supports three ways to specify the recipient:
+* `age-vault vault-key encrypt`: encrypts the vault key for a recipient. If a vault key does not yet exist, one is created and then encrypted using the configured identity. Supports two ways to specify the recipient:
   * `--pubkey [public key string]`: encrypts using a public key string
   * `--pubkey-file [public key file]`: encrypts using a public key from a file
-  * `--identity [identity file]`: extracts the public key from an identity file and encrypts with it
-  * Saves to `AGE_VAULT_KEY_FILE` by default, or use `-o [output file]` to specify a different location
+  * Outputs to stdout by default. Use `--save` to save to `AGE_VAULT_KEY_FILE`, or `-o [output file]` to save to a specific location
 * `age-vault vault-key pubkey`: outputs the public key for the vault key. Will output to stdout unless `-o [output file]` is provided.
 * `age-vault vault-key set [encrypted key file]`: copies the provided encrypted vault key file to `AGE_VAULT_KEY_FILE`.
 * `age-vault identity set [identity file]`: copies the identity file to the `AGE_VAULT_IDENTITY_FILE` location.
@@ -80,8 +84,9 @@ ssh_keys_dir: path/to/ssh_keys/
 ## New vault workflow
 
 * Create a new age identity using one of the `age` keygen commands (like `age-plugin-tpm`)
-* Move the newly created identity into the age vault using: `age-vault identity set [identity file]`
-* Initialize the vault key using `age-vault vault-key encrypt --identity [identity file]`
+* Extract the public key from the identity file (e.g., `age-keygen -y [identity file]` for native age, or plugin-specific command)
+* Move the identity into the age vault using: `age-vault identity set [identity file]`
+* Initialize the vault key using: `age-vault vault-key encrypt --pubkey-file [public key file]`
 
 ## New user/machine workflow
 
